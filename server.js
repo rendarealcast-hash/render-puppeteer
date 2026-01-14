@@ -6,7 +6,15 @@ app.use(express.json());
 
 app.post("/render", async (req, res) => {
   const slides = req.body.slides;
-  const browser = await puppeteer.launch({ args: ["--no-sandbox"] });
+  const browser = await puppeteer.launch({
+  headless: "new",
+  args: [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage"
+  ]
+});
+
   const page = await browser.newPage();
   const images = [];
 
