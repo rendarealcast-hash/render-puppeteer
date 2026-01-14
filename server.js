@@ -19,7 +19,7 @@ app.post("/render", async (req, res) => {
   let browser;
 
   try {
-    const executablePath = await chromium.executablePath({ cache: true });
+    const executablePath = await chromium.executablePath();
 
 browser = await puppeteer.launch({
   args: [...chromium.args, "--single-process"],
