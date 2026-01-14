@@ -1,19 +1,18 @@
 import express from "express";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 
 const app = express();
 app.use(express.json());
 
 app.post("/render", async (req, res) => {
-  const slides = req.body.slides;
   const browser = await puppeteer.launch({
-  headless: "new",
-  args: [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage"
-  ]
+    args: chromium.args,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  });
 });
+
 
   const page = await browser.newPage();
   const images = [];
