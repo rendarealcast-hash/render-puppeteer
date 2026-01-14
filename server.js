@@ -61,12 +61,12 @@ browser = await puppeteer.launch({
         <body>
           <div class="card">
             <div>
-              <div class="badge">DICA ${i + 1} / ${slides.length}</div>
+              <div class="badge">Renda Real Cast ${i + 1} / ${slides.length}</div>
               <h1>${text}</h1>
-              <p>Salve este post para não esquecer</p>
+              <p>Economia e Imóveis em 3 min!</p>
             </div>
             <div>
-              <div class="footer"><span>@seuperfil</span><span>Arraste →</span></div>
+              <div class="footer"><span>@rendarealcast</span><span>Arraste →</span></div>
               <div class="bar"><div class="bar-fill"></div></div>
             </div>
           </div>
