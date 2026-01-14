@@ -1,14 +1,35 @@
 import express from "express";
 import puppeteer from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
+import crypto from "crypto";
 
 const app = express();
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "25mb" })); // aumentei pq base64 cresce
 
-app.get("/", (req, res) => {
-  res.status(200).send("ok");
+// ====== HOST DE IMAGENS (em memória) ======
+const store = new Map(); // id -> { buf, mime, exp }
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of store.entries()) {
+    if (v.exp < now) store.delete(k);
+  }
+}, 60_000);
+
+// Serve JPG direto (isso a Meta consegue baixar)
+app.get("/img/:id", (req, res) => {
+  const v = store.get(req.params.id);
+  if (!v) return res.status(404).send("not found");
+
+  res.setHeader("Content-Type", v.mime || "image/jpeg");
+  res.setHeader("Cache-Control", "public, max-age=600");
+  return res.send(v.buf);
 });
 
+app.get("/", (req, res) => res.status(200).send("ok"));
+app.get("/health", (req, res) => res.status(200).send("ok"));
+
+// ====== RENDER ======
 app.post("/render", async (req, res) => {
   const slides = req.body?.slides;
 
@@ -19,19 +40,18 @@ app.post("/render", async (req, res) => {
   let browser;
 
   try {
-    const executablePath = await chromium.executablePath();
-
-browser = await puppeteer.launch({
-  args: [...chromium.args, "--single-process"],
-  executablePath: await chromium.executablePath({ cache: true }),
-  headless: chromium.headless,
-});
-
+    browser = await puppeteer.launch({
+      args: [...chromium.args, "--single-process"],
+      executablePath: await chromium.executablePath({ cache: true }),
+      headless: chromium.headless,
+    });
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1080, height: 1080, deviceScaleFactor: 1 });
 
-    const images = [];
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const ttlMs = 30 * 60 * 1000; // 30 min pra Meta baixar
+    const urls = [];
 
     for (let i = 0; i < slides.length; i++) {
       const raw = String(slides[i] ?? "");
@@ -43,6 +63,7 @@ browser = await puppeteer.launch({
 
       const progress = Math.round(((i + 1) / slides.length) * 100);
 
+      // ====== SEU HTML (edite aqui quando precisar) ======
       await page.setContent(
         `
         <html>
@@ -76,24 +97,24 @@ browser = await puppeteer.launch({
         { waitUntil: "load" }
       );
 
+      // Gera JPEG e guarda no store
       const buffer = await page.screenshot({ type: "jpeg", quality: 90 });
-      images.push(buffer.toString("base64"));
+      const id = crypto.randomUUID();
+      store.set(id, { buf: buffer, mime: "image/jpeg", exp: Date.now() + ttlMs });
+
+      urls.push(`${baseUrl}/img/${id}`);
     }
 
-    return res.json({ images });
+    // Agora você manda "urls" pra Meta (em vez de Drive)
+    return res.json({ urls });
 
   } catch (err) {
     console.error("RENDER_ERROR:", err);
     return res.status(500).json({ error: "render_failed" });
   } finally {
-    if (browser) {
-      await browser.close();
-    }
+    if (browser) await browser.close();
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Listening on", PORT);
-});
-
+app.listen(PORT, () => console.log("Listening on", PORT));
