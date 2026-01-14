@@ -19,13 +19,14 @@ app.post("/render", async (req, res) => {
   let browser;
 
   try {
-    const executablePath = await chromium.executablePath();
+    const executablePath = await chromium.executablePath({ cache: true });
 
-    browser = await puppeteer.launch({
-      args: chromium.args,
-      executablePath,
-      headless: chromium.headless,
-    });
+browser = await puppeteer.launch({
+  args: [...chromium.args, "--single-process"],
+  executablePath: await chromium.executablePath({ cache: true }),
+  headless: chromium.headless,
+});
+
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1080, height: 1080, deviceScaleFactor: 1 });
