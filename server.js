@@ -179,15 +179,13 @@ await page.setContent(
       flex-direction:column;
       height:100%;
       width:100%;
+      background:#0b0b0b;
     }
-    .image{
-      height:52%;
-      width:100%;
-      ${bgCss}
-    }
+
+    /* TEXTO EM CIMA (como The Economist) */
     .content{
       height:48%;
-      padding:70px 80px 60px 80px; /* mais respiro */
+      padding:70px 80px 60px 80px;
       box-sizing:border-box;
       display:flex;
       flex-direction:column;
@@ -198,7 +196,7 @@ await page.setContent(
       display:flex;
       flex-direction:column;
       gap:16px;
-      max-height:520px;            /* evita overflow */
+      max-height:520px;
       overflow:hidden;
     }
     .kicker{
@@ -241,12 +239,18 @@ await page.setContent(
       border:1px solid rgba(255,255,255,.25);
       border-radius:999px;
     }
+
+    /* IMAGEM EMBAIXO (como referência) */
+    .image{
+      height:52%;
+      width:100%;
+      ${bgCss}
+    }
   </style>
 </head>
 
 <body>
   <div class="container">
-    <div class="image"></div>
 
     <div class="content">
       <div class="top">
@@ -261,9 +265,13 @@ await page.setContent(
         <div class="tag">Leia a legenda ↓</div>
       </div>
     </div>
+
+    <div class="image"></div>
+
   </div>
 </body>
 </html>
+
 `,
   { waitUntil: "load" }
 );
