@@ -160,9 +160,8 @@ app.post("/render-post", async (req, res) => {
          background-position: center;`
       : `background: radial-gradient(1200px 900px at 20% 20%, #1b2a3a 0%, #0b0f14 55%, #07090c 100%);`;
 
-    await page.setContent(
-      `
-
+await page.setContent(
+  `
 <html>
 <head>
   <meta charset="utf-8" />
@@ -184,10 +183,7 @@ app.post("/render-post", async (req, res) => {
     .image{
       height:52%;
       width:100%;
-      background-image:url('${IMAGE}');
-      background-size:cover;
-      background-position:center;
-      background-repeat:no-repeat;
+      ${bgCss}
     }
     .content{
       height:48%;
@@ -228,13 +224,10 @@ app.post("/render-post", async (req, res) => {
   </div>
 </body>
 </html>
-
-
-
-      `,
-      { waitUntil: "load" }
-    );
-
+`,
+  { waitUntil: "load" }
+);
+    
     const buffer = await page.screenshot({ type: "jpeg", quality: 92 });
     const id = crypto.randomUUID();
     store.set(id, { buf: buffer, mime: "image/jpeg", exp: Date.now() + ttlMs });
