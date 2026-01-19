@@ -184,7 +184,7 @@ app.post("/render-post", async (req, res) => {
     .image{
       height:52%;
       width:100%;
-      background-image:url("${IMAGE}");
+      background-image:url('${IMAGE}');
       background-size:cover;
       background-position:center;
       background-repeat:no-repeat;
@@ -207,6 +207,7 @@ app.post("/render-post", async (req, res) => {
     .tag{padding:10px 16px;border:1px solid rgba(255,255,255,.25);border-radius:999px;}
   </style>
 </head>
+
 <body>
   <div class="container">
     <div class="image"></div>
@@ -227,6 +228,7 @@ app.post("/render-post", async (req, res) => {
   </div>
 </body>
 </html>
+
 
 
       `,
