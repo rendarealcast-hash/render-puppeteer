@@ -4,7 +4,7 @@ import chromium from "@sparticuz/chromium";
 import crypto from "crypto";
 
 const app = express();
-app.use(express.json({ limit: "25mb" })); // aumentei pq base64 cresce
+app.use(express.json({ limit: "25mb" }));
 
 // ====== HOST DE IMAGENS (em memória) ======
 const store = new Map(); // id -> { buf, mime, exp }
@@ -16,7 +16,6 @@ setInterval(() => {
   }
 }, 60_000);
 
-// Serve JPG direto (isso a Meta consegue baixar)
 app.get("/img/:id", (req, res) => {
   const v = store.get(req.params.id);
   if (!v) return res.status(404).send("not found");
@@ -29,7 +28,23 @@ app.get("/img/:id", (req, res) => {
 app.get("/", (req, res) => res.status(200).send("ok"));
 app.get("/health", (req, res) => res.status(200).send("ok"));
 
-// ====== RENDER ======
+async function launchBrowser() {
+  return puppeteer.launch({
+    args: [...chromium.args, "--single-process"],
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  });
+}
+
+function escapeHtml(raw) {
+  return String(raw ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// ====== (A) CARROSSEL - mantém seu endpoint atual ======
 app.post("/render", async (req, res) => {
   const slides = req.body?.slides;
 
@@ -40,31 +55,19 @@ app.post("/render", async (req, res) => {
   let browser;
 
   try {
-browser = await puppeteer.launch({
-  args: [...chromium.args, "--single-process"],
-  executablePath: await chromium.executablePath(), // SEM objeto
-  headless: chromium.headless,
-});
-
-
+    browser = await launchBrowser();
     const page = await browser.newPage();
+
     await page.setViewport({ width: 1080, height: 1080, deviceScaleFactor: 1 });
 
     const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const ttlMs = 30 * 60 * 1000; // 30 min pra Meta baixar
+    const ttlMs = 30 * 60 * 1000;
     const urls = [];
 
     for (let i = 0; i < slides.length; i++) {
-      const raw = String(slides[i] ?? "");
-      const text = raw
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-
+      const text = escapeHtml(slides[i]);
       const progress = Math.round(((i + 1) / slides.length) * 100);
 
-      // ====== SEU HTML (edite aqui quando precisar) ======
       await page.setContent(
         `
         <html>
@@ -98,20 +101,109 @@ browser = await puppeteer.launch({
         { waitUntil: "load" }
       );
 
-      // Gera JPEG e guarda no store
       const buffer = await page.screenshot({ type: "jpeg", quality: 90 });
       const id = crypto.randomUUID();
       store.set(id, { buf: buffer, mime: "image/jpeg", exp: Date.now() + ttlMs });
-
       urls.push(`${baseUrl}/img/${id}`);
     }
 
-    // Agora você manda "urls" pra Meta (em vez de Drive)
     return res.json({ urls });
-
   } catch (err) {
     console.error("RENDER_ERROR:", err);
     return res.status(500).json({ error: "render_failed" });
+  } finally {
+    if (browser) await browser.close();
+  }
+});
+
+// ====== (B) POST ÚNICO - NOVO endpoint “The Economist style” ======
+// Espera: { headline: "...", subheadline: "...", kicker?: "...", brand?: "...", bg?: "..." }
+// Retorna: { url: "..." } (apenas 1)
+app.post("/render-post", async (req, res) => {
+  const headline = (req.body?.headline ?? "").toString().trim();
+  const subheadline = (req.body?.subheadline ?? "").toString().trim();
+
+  // opcionais
+  const kicker = (req.body?.kicker ?? "Economia & Mercado Imobiliario").toString().trim();
+  const brand = (req.body?.brand ?? "@rendarealcast").toString().trim();
+
+  // bg: URL de uma imagem (opcional). Se vazio, usa gradiente.
+  const bg = (req.body?.bg ?? "").toString().trim();
+
+  if (!headline) {
+    return res.status(400).json({ error: "Body must include { headline: \"...\" }" });
+  }
+
+  let browser;
+
+  try {
+    browser = await launchBrowser();
+    const page = await browser.newPage();
+
+    // Formato recomendado p/ feed: 1080x1350
+    await page.setViewport({ width: 1080, height: 1350, deviceScaleFactor: 1 });
+
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const ttlMs = 30 * 60 * 1000;
+
+    const H = escapeHtml(headline);
+    const S = escapeHtml(subheadline);
+    const K = escapeHtml(kicker);
+    const B = escapeHtml(brand);
+
+    // background: imagem (se fornecida) ou gradiente
+    const bgCss = bg
+      ? `background-image:
+          linear-gradient(180deg, rgba(0,0,0,.65), rgba(0,0,0,.30)),
+          url("${escapeHtml(bg)}");
+         background-size: cover;
+         background-position: center;`
+      : `background: radial-gradient(1200px 900px at 20% 20%, #1b2a3a 0%, #0b0f14 55%, #07090c 100%);`;
+
+    await page.setContent(
+      `
+      <html>
+      <head>
+        <style>
+          body{margin:0;width:1080px;height:1350px;font-family:Arial;color:#fff;${bgCss}}
+          .wrap{height:100%;padding:90px 90px 70px 90px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between}
+          .top{display:flex;flex-direction:column;gap:18px}
+          .kicker{font-size:24px;letter-spacing:2px;text-transform:uppercase;opacity:.85}
+          .rule{height:6px;width:120px;background:#e3120b;border-radius:3px}
+          .headline{font-size:78px;line-height:1.05;margin:0;white-space:pre-wrap}
+          .sub{font-size:34px;line-height:1.25;opacity:.92;margin:0;white-space:pre-wrap;max-width:900px}
+          .bottom{display:flex;align-items:center;justify-content:space-between;opacity:.80;font-size:22px}
+          .tag{padding:10px 14px;border:1px solid rgba(255,255,255,.25);border-radius:999px}
+        </style>
+      </head>
+      <body>
+        <div class="wrap">
+          <div class="top">
+            <div class="kicker">${K}</div>
+            <div class="rule"></div>
+            <h1 class="headline">${H}</h1>
+            ${S ? `<p class="sub">${S}</p>` : ""}
+          </div>
+
+          <div class="bottom">
+            <div class="tag">${B}</div>
+            <div class="tag">Leia a legenda</div>
+          </div>
+        </div>
+      </body>
+      </html>
+      `,
+      { waitUntil: "load" }
+    );
+
+    const buffer = await page.screenshot({ type: "jpeg", quality: 92 });
+    const id = crypto.randomUUID();
+    store.set(id, { buf: buffer, mime: "image/jpeg", exp: Date.now() + ttlMs });
+
+    return res.json({ url: `${baseUrl}/img/${id}` });
+  } catch (err) {
+    console.error("RENDER_POST_ERROR:", err);
+    return res.status(500).json({ error: "render_post_failed" });
   } finally {
     if (browser) await browser.close();
   }
