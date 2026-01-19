@@ -170,10 +170,11 @@ await page.setContent(
       margin:0;
       width:1080px;
       height:1350px;
-      font-family:Arial, Helvetica, sans-serif;
+      font-family: Georgia, "Times New Roman", serif;
       background:#0b0b0b;
       color:#fff;
     }
+
     .container{
       display:flex;
       flex-direction:column;
@@ -182,67 +183,62 @@ await page.setContent(
       background:#0b0b0b;
     }
 
-    /* TEXTO EM CIMA (como The Economist) */
+    /* ===== TOPO (TEXTO) ===== */
     .content{
-      height:48%;
-      padding:70px 80px 60px 80px;
+      height:46%;
+      padding:80px 90px 60px 90px;
       box-sizing:border-box;
       display:flex;
       flex-direction:column;
-      justify-content:space-between;
-      background:#0b0b0b;
+      justify-content:flex-start;
+      position:relative;
     }
-    .top{
-      display:flex;
-      flex-direction:column;
-      gap:16px;
-      max-height:520px;
-      overflow:hidden;
+
+    .brand{
+      position:absolute;
+      top:40px;
+      right:90px;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size:18px;
+      opacity:.75;
     }
+
     .kicker{
-      font-size:clamp(18px, 2.2vw, 24px);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size:18px;
       letter-spacing:2px;
       text-transform:uppercase;
-      opacity:.85;
+      opacity:.75;
+      margin-bottom:14px;
     }
+
     .rule{
-      height:6px;
-      width:120px;
+      height:4px;
+      width:110px;
       background:#e3120b;
-      border-radius:3px;
-      flex-shrink:0;
+      margin-bottom:28px;
     }
+
     .headline{
-      font-size:clamp(48px, 6.2vw, 74px);
-      line-height:1.08;
-      margin:0;
+      font-size:56px;          /* menor e mais editorial */
+      line-height:1.12;
+      margin:0 0 18px 0;
       white-space:pre-wrap;
     }
+
     .sub{
-      font-size:clamp(26px, 3.2vw, 34px);
-      line-height:1.25;
-      opacity:.92;
-      margin-top:12px;
+      font-size:28px;
+      line-height:1.35;
+      font-style:italic;
+      opacity:.9;
+      margin:0;
       max-width:900px;
       white-space:pre-wrap;
     }
-    .bottom{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      opacity:.80;
-      font-size:22px;
-      margin-top:24px;
-    }
-    .tag{
-      padding:10px 16px;
-      border:1px solid rgba(255,255,255,.25);
-      border-radius:999px;
-    }
 
-    /* IMAGEM EMBAIXO (como referência) */
+    /* ===== IMAGEM EMBAIXO ===== */
     .image{
-      height:52%;
+      height:54%;
       width:100%;
       ${bgCss}
     }
@@ -253,17 +249,13 @@ await page.setContent(
   <div class="container">
 
     <div class="content">
-      <div class="top">
-        <div class="kicker">${K}</div>
-        <div class="rule"></div>
-        <h1 class="headline">${H}</h1>
-        ${S ? `<p class="sub">${S}</p>` : ""}
-      </div>
+      <div class="brand">${B}</div>
 
-      <div class="bottom">
-        <div class="tag">${B}</div>
-        <div class="tag">Leia a legenda ↓</div>
-      </div>
+      <div class="kicker">${K}</div>
+      <div class="rule"></div>
+
+      <h1 class="headline">${H}</h1>
+      ${S ? `<p class="sub">${S}</p>` : ""}
     </div>
 
     <div class="image"></div>
@@ -271,6 +263,7 @@ await page.setContent(
   </div>
 </body>
 </html>
+
 
 `,
   { waitUntil: "load" }
