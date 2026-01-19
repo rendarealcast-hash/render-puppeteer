@@ -187,20 +187,60 @@ await page.setContent(
     }
     .content{
       height:48%;
-      padding:80px 90px 70px 90px;
+      padding:70px 80px 60px 80px; /* mais respiro */
       box-sizing:border-box;
       display:flex;
       flex-direction:column;
       justify-content:space-between;
       background:#0b0b0b;
     }
-    .top{display:flex;flex-direction:column;gap:18px;}
-    .kicker{font-size:24px;letter-spacing:2px;text-transform:uppercase;opacity:.85;}
-    .rule{height:6px;width:120px;background:#e3120b;border-radius:3px;}
-    .headline{font-size:74px;line-height:1.05;margin:0;white-space:pre-wrap;}
-    .sub{font-size:34px;line-height:1.25;opacity:.92;margin:0;max-width:900px;white-space:pre-wrap;}
-    .bottom{display:flex;align-items:center;justify-content:space-between;opacity:.80;font-size:22px;}
-    .tag{padding:10px 16px;border:1px solid rgba(255,255,255,.25);border-radius:999px;}
+    .top{
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+      max-height:520px;            /* evita overflow */
+      overflow:hidden;
+    }
+    .kicker{
+      font-size:clamp(18px, 2.2vw, 24px);
+      letter-spacing:2px;
+      text-transform:uppercase;
+      opacity:.85;
+    }
+    .rule{
+      height:6px;
+      width:120px;
+      background:#e3120b;
+      border-radius:3px;
+      flex-shrink:0;
+    }
+    .headline{
+      font-size:clamp(48px, 6.2vw, 74px);
+      line-height:1.08;
+      margin:0;
+      white-space:pre-wrap;
+    }
+    .sub{
+      font-size:clamp(26px, 3.2vw, 34px);
+      line-height:1.25;
+      opacity:.92;
+      margin-top:12px;
+      max-width:900px;
+      white-space:pre-wrap;
+    }
+    .bottom{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      opacity:.80;
+      font-size:22px;
+      margin-top:24px;
+    }
+    .tag{
+      padding:10px 16px;
+      border:1px solid rgba(255,255,255,.25);
+      border-radius:999px;
+    }
   </style>
 </head>
 
@@ -218,7 +258,7 @@ await page.setContent(
 
       <div class="bottom">
         <div class="tag">${B}</div>
-        <div class="tag">Leia a legenda</div>
+        <div class="tag">Leia a legenda ↓</div>
       </div>
     </div>
   </div>
