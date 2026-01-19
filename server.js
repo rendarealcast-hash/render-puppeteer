@@ -162,36 +162,121 @@ app.post("/render-post", async (req, res) => {
 
     await page.setContent(
       `
-      <html>
-      <head>
-        <style>
-          body{margin:0;width:1080px;height:1350px;font-family:Arial;color:#fff;${bgCss}}
-          .wrap{height:100%;padding:90px 90px 70px 90px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between}
-          .top{display:flex;flex-direction:column;gap:18px}
-          .kicker{font-size:24px;letter-spacing:2px;text-transform:uppercase;opacity:.85}
-          .rule{height:6px;width:120px;background:#e3120b;border-radius:3px}
-          .headline{font-size:78px;line-height:1.05;margin:0;white-space:pre-wrap}
-          .sub{font-size:34px;line-height:1.25;opacity:.92;margin:0;white-space:pre-wrap;max-width:900px}
-          .bottom{display:flex;align-items:center;justify-content:space-between;opacity:.80;font-size:22px}
-          .tag{padding:10px 14px;border:1px solid rgba(255,255,255,.25);border-radius:999px}
-        </style>
-      </head>
-      <body>
-        <div class="wrap">
-          <div class="top">
-            <div class="kicker">${K}</div>
-            <div class="rule"></div>
-            <h1 class="headline">${H}</h1>
-            ${S ? `<p class="sub">${S}</p>` : ""}
-          </div>
+<html>
+<head>
+  <style>
+    body{
+      margin:0;
+      width:1080px;
+      height:1350px;
+      font-family:Arial, Helvetica, sans-serif;
+      background:#0b0b0b;
+      color:#fff;
+    }
 
-          <div class="bottom">
-            <div class="tag">${B}</div>
-            <div class="tag">Leia a legenda</div>
-          </div>
-        </div>
-      </body>
-      </html>
+    .container{
+      display:flex;
+      flex-direction:column;
+      height:100%;
+      width:100%;
+    }
+
+    /* HERO IMAGE */
+    .image{
+      height:52%;
+      width:100%;
+      background-image:url('${IMAGE_URL}');
+      background-size:cover;
+      background-position:center;
+      background-repeat:no-repeat;
+    }
+
+    /* CONTENT */
+    .content{
+      height:48%;
+      padding:80px 90px 70px 90px;
+      box-sizing:border-box;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      background:#0b0b0b;
+    }
+
+    .top{
+      display:flex;
+      flex-direction:column;
+      gap:18px;
+    }
+
+    .kicker{
+      font-size:24px;
+      letter-spacing:2px;
+      text-transform:uppercase;
+      opacity:.85;
+    }
+
+    .rule{
+      height:6px;
+      width:120px;
+      background:#e3120b;
+      border-radius:3px;
+    }
+
+    .headline{
+      font-size:74px;
+      line-height:1.05;
+      margin:0;
+      white-space:pre-wrap;
+    }
+
+    .sub{
+      font-size:34px;
+      line-height:1.25;
+      opacity:.92;
+      margin:0;
+      max-width:900px;
+      white-space:pre-wrap;
+    }
+
+    .bottom{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      opacity:.80;
+      font-size:22px;
+    }
+
+    .tag{
+      padding:10px 16px;
+      border:1px solid rgba(255,255,255,.25);
+      border-radius:999px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    
+    <div class="image"></div>
+
+    <div class="content">
+      <div class="top">
+        <div class="kicker">${K}</div>
+        <div class="rule"></div>
+        <h1 class="headline">${H}</h1>
+        ${S ? `<p class="sub">${S}</p>` : ""}
+      </div>
+
+      <div class="bottom">
+        <div class="tag">${B}</div>
+        <div class="tag">Leia a legenda</div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
+
       `,
       { waitUntil: "load" }
     );
