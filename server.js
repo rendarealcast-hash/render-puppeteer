@@ -162,8 +162,10 @@ app.post("/render-post", async (req, res) => {
 
     await page.setContent(
       `
+
 <html>
 <head>
+  <meta charset="utf-8" />
   <style>
     body{
       margin:0;
@@ -173,25 +175,20 @@ app.post("/render-post", async (req, res) => {
       background:#0b0b0b;
       color:#fff;
     }
-
     .container{
       display:flex;
       flex-direction:column;
       height:100%;
       width:100%;
     }
-
-    /* HERO IMAGE */
     .image{
       height:52%;
       width:100%;
-      background-image:url('${IMAGE_URL}');
+      background-image:url("${IMAGE}");
       background-size:cover;
       background-position:center;
       background-repeat:no-repeat;
     }
-
-    /* CONTENT */
     .content{
       height:48%;
       padding:80px 90px 70px 90px;
@@ -201,62 +198,17 @@ app.post("/render-post", async (req, res) => {
       justify-content:space-between;
       background:#0b0b0b;
     }
-
-    .top{
-      display:flex;
-      flex-direction:column;
-      gap:18px;
-    }
-
-    .kicker{
-      font-size:24px;
-      letter-spacing:2px;
-      text-transform:uppercase;
-      opacity:.85;
-    }
-
-    .rule{
-      height:6px;
-      width:120px;
-      background:#e3120b;
-      border-radius:3px;
-    }
-
-    .headline{
-      font-size:74px;
-      line-height:1.05;
-      margin:0;
-      white-space:pre-wrap;
-    }
-
-    .sub{
-      font-size:34px;
-      line-height:1.25;
-      opacity:.92;
-      margin:0;
-      max-width:900px;
-      white-space:pre-wrap;
-    }
-
-    .bottom{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      opacity:.80;
-      font-size:22px;
-    }
-
-    .tag{
-      padding:10px 16px;
-      border:1px solid rgba(255,255,255,.25);
-      border-radius:999px;
-    }
+    .top{display:flex;flex-direction:column;gap:18px;}
+    .kicker{font-size:24px;letter-spacing:2px;text-transform:uppercase;opacity:.85;}
+    .rule{height:6px;width:120px;background:#e3120b;border-radius:3px;}
+    .headline{font-size:74px;line-height:1.05;margin:0;white-space:pre-wrap;}
+    .sub{font-size:34px;line-height:1.25;opacity:.92;margin:0;max-width:900px;white-space:pre-wrap;}
+    .bottom{display:flex;align-items:center;justify-content:space-between;opacity:.80;font-size:22px;}
+    .tag{padding:10px 16px;border:1px solid rgba(255,255,255,.25);border-radius:999px;}
   </style>
 </head>
-
 <body>
   <div class="container">
-    
     <div class="image"></div>
 
     <div class="content">
@@ -272,10 +224,10 @@ app.post("/render-post", async (req, res) => {
         <div class="tag">Leia a legenda</div>
       </div>
     </div>
-
   </div>
 </body>
 </html>
+
 
       `,
       { waitUntil: "load" }
