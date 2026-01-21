@@ -60,9 +60,12 @@ app.post("/render", async (req, res) => {
 
     await page.setViewport({ width: 1080, height: 1080, deviceScaleFactor: 1 });
 
-    const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https").toString().split(",")[0].trim();
-const host = req.headers["x-forwarded-host"] || req.get("host");
-const baseUrl = `${proto}://${host}`;
+    const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https")
+      .toString()
+      .split(",")[0]
+      .trim();
+    const host = req.headers["x-forwarded-host"] || req.get("host");
+    const baseUrl = `${proto}://${host}`;
 
     const ttlMs = 30 * 60 * 1000;
     const urls = [];
@@ -119,7 +122,7 @@ const baseUrl = `${proto}://${host}`;
   }
 });
 
-// ====== (B) POST ÚNICO - NOVO endpoint “The Economist style” ======
+// ====== (B) POST ÚNICO - endpoint “The Economist style” ======
 // Espera: { headline: "...", subheadline: "...", kicker?: "...", brand?: "...", bg?: "..." }
 // Retorna: { url: "..." } (apenas 1)
 app.post("/render-post", async (req, res) => {
@@ -134,7 +137,7 @@ app.post("/render-post", async (req, res) => {
   const bg = (req.body?.bg ?? "").toString().trim();
 
   if (!headline) {
-    return res.status(400).json({ error: "Body must include { headline: \"...\" }" });
+    return res.status(400).json({ error: 'Body must include { headline: "..." }' });
   }
 
   let browser;
@@ -146,9 +149,12 @@ app.post("/render-post", async (req, res) => {
     // Formato recomendado p/ feed: 1080x1350
     await page.setViewport({ width: 1080, height: 1350, deviceScaleFactor: 1 });
 
-    const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https").toString().split(",")[0].trim();
-const host = req.headers["x-forwarded-host"] || req.get("host");
-const baseUrl = `${proto}://${host}`;
+    const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https")
+      .toString()
+      .split(",")[0]
+      .trim();
+    const host = req.headers["x-forwarded-host"] || req.get("host");
+    const baseUrl = `${proto}://${host}`;
 
     const ttlMs = 30 * 60 * 1000;
 
@@ -157,17 +163,23 @@ const baseUrl = `${proto}://${host}`;
     const K = escapeHtml(kicker);
     const B = escapeHtml(brand);
 
-    // background: imagem (se fornecida) ou gradiente
+    // ===== AJUSTE CIRÚRGICO: detectar infográfico e usar contain =====
+    const isGraphic =
+      /\.png(\?|$)/i.test(bg) ||
+      /infogra|grafico|chart|diagram|svg/i.test(bg);
+
     const bgCss = bg
       ? `background-image:
-          linear-gradient(180deg, rgba(0,0,0,.65), rgba(0,0,0,.30)),
-          url("${escapeHtml(bg)}");
-         background-size: cover;
-         background-position: center;`
+            linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,.20)),
+            url("${escapeHtml(bg)}");
+         background-repeat:no-repeat;
+         background-position:center;
+         background-size:${isGraphic ? "contain" : "cover"};
+         background-color:#0b0b0b;`
       : `background: radial-gradient(1200px 900px at 20% 20%, #1b2a3a 0%, #0b0f14 55%, #07090c 100%);`;
 
-await page.setContent(
-  `
+    await page.setContent(
+      `
 <html>
 <head>
   <meta charset="utf-8" />
@@ -226,7 +238,7 @@ await page.setContent(
     }
 
     .headline{
-      font-size:56px;          /* menor e mais editorial */
+      font-size:56px;
       line-height:1.12;
       margin:0 0 18px 0;
       white-space:pre-wrap;
@@ -269,12 +281,10 @@ await page.setContent(
   </div>
 </body>
 </html>
-
-
 `,
-  { waitUntil: "load" }
-);
-    
+      { waitUntil: "load" }
+    );
+
     const buffer = await page.screenshot({ type: "jpeg", quality: 92 });
     const id = crypto.randomUUID();
     store.set(id, { buf: buffer, mime: "image/jpeg", exp: Date.now() + ttlMs });
