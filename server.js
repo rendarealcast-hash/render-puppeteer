@@ -60,7 +60,10 @@ app.post("/render", async (req, res) => {
 
     await page.setViewport({ width: 1080, height: 1080, deviceScaleFactor: 1 });
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https").toString().split(",")[0].trim();
+const host = req.headers["x-forwarded-host"] || req.get("host");
+const baseUrl = `${proto}://${host}`;
+
     const ttlMs = 30 * 60 * 1000;
     const urls = [];
 
@@ -143,7 +146,10 @@ app.post("/render-post", async (req, res) => {
     // Formato recomendado p/ feed: 1080x1350
     await page.setViewport({ width: 1080, height: 1350, deviceScaleFactor: 1 });
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https").toString().split(",")[0].trim();
+const host = req.headers["x-forwarded-host"] || req.get("host");
+const baseUrl = `${proto}://${host}`;
+
     const ttlMs = 30 * 60 * 1000;
 
     const H = escapeHtml(headline);
