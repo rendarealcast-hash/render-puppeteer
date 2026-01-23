@@ -6,8 +6,10 @@ import { Resvg } from "@resvg/resvg-js";
 const app = express();
 app.use(express.json({ limit: "5mb" }));
 
-// ================= STORE DE IMAGENS (igual ao seu) =================
-const store = new Map(); // id -> { buf, mime, exp }
+/* =========================================================
+   STORE TEMPORÁRIO DE IMAGENS (igual ao seu original)
+   ========================================================= */
+const store = new Map();
 
 setInterval(() => {
   const now = Date.now();
@@ -19,7 +21,7 @@ setInterval(() => {
 app.get("/img/:id", (req, res) => {
   const v = store.get(req.params.id);
   if (!v) return res.status(404).send("not found");
-  res.setHeader("Content-Type", v.mime || "image/png");
+  res.setHeader("Content-Type", "image/png");
   res.setHeader("Cache-Control", "public, max-age=600");
   res.send(v.buf);
 });
@@ -27,7 +29,9 @@ app.get("/img/:id", (req, res) => {
 app.get("/", (_, res) => res.send("ok"));
 app.get("/health", (_, res) => res.send("ok"));
 
-// ================= HELPERS =================
+/* =========================================================
+   HELPERS
+   ========================================================= */
 const esc = (s = "") =>
   String(s)
     .replace(/&/g,"&amp;")
@@ -47,99 +51,28 @@ async function toDataUri(url) {
 
 function baseUrl(req) {
   const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https")
-    .toString()
-    .split(",")[0]
-    .trim();
+    .toString().split(",")[0].trim();
   const host = req.headers["x-forwarded-host"] || req.get("host");
   return `${proto}://${host}`;
 }
 
-// ================= (A) CARROSSEL =================
-// Espera: { slides: ["texto 1", "texto 2", ...] }
-// Retorna: { urls: [...] }
-app.post("/render", async (req, res) => {
-  const slides = req.body?.slides;
+/* =========================================================
+   TEMPLATE: POST ÚNICO (ESTILO ECONOMIST)
+   =========================================================
+   ▶ VARIÁVEIS ESPERADAS:
+   { headline, subheadline?, kicker?, brand?, bg? }
 
-  if (!Array.isArray(slides) || !slides.length) {
-    return res.status(400).json({ error: "Body must include { slides: [...] }" });
-  }
-
-  try {
-    const width = 1080;
-    const height = 1080;
-    const ttlMs = 30 * 60 * 1000;
-    const urls = [];
-
-    for (let i = 0; i < slides.length; i++) {
-      const text = esc(slides[i]);
-      const progress = Math.round(((i + 1) / slides.length) * 100);
-
-      const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-  <defs>
-    <style>
-      .bg { fill: url(#grad); }
-      .badge { font: 700 26px Arial, Helvetica, sans-serif; fill: rgba(255,255,255,.8); }
-      .h1 { font: 700 72px Arial, Helvetica, sans-serif; fill: #fff; }
-      .p { font: 400 36px Arial, Helvetica, sans-serif; fill: rgba(255,255,255,.9); }
-      .footer { font: 400 24px Arial, Helvetica, sans-serif; fill: rgba(255,255,255,.7); }
-    </style>
-
-    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0b1c2d"/>
-      <stop offset="100%" stop-color="#0f2a44"/>
-    </linearGradient>
-  </defs>
-
-  <rect width="100%" height="100%" class="bg"/>
-
-  <g transform="translate(80,90)">
-    <text class="badge">Renda Real Cast ${i + 1} / ${slides.length}</text>
-
-    <text class="h1" y="160">
-      <tspan x="0">${text}</tspan>
-    </text>
-
-    <text class="p" y="520">Economia e Imóveis em 3 min!</text>
-
-    <g transform="translate(0,760)">
-      <text class="footer">@rendarealcast</text>
-      <text class="footer" x="780">Arraste →</text>
-      <rect y="24" width="920" height="6" rx="3" fill="rgba(255,255,255,.15)"/>
-      <rect y="24" width="${(920 * progress) / 100}" height="6" rx="3" fill="#4da3ff"/>
-    </g>
-  </g>
-</svg>`.trim();
-
-      const png = new Resvg(svg).render().asPng();
-      const id = crypto.randomUUID();
-
-      store.set(id, {
-        buf: Buffer.from(png),
-        mime: "image/png",
-        exp: Date.now() + ttlMs
-      });
-
-      urls.push(`${baseUrl(req)}/img/${id}`);
-    }
-
-    res.json({ urls });
-
-  } catch (err) {
-    console.error("SVG_CAROUSEL_ERROR:", err);
-    res.status(500).json({ error: "render_failed" });
-  }
-});
-
-// ================= (B) POST ÚNICO =================
-// Espera: { headline, subheadline?, kicker?, brand?, bg? }
-// Retorna: { url }
+   ▶ PARA CRIAR NOVO TEMPLATE:
+   - Duplique este endpoint
+   - Mude APENAS o SVG abaixo
+   - Mantenha o contrato de payload
+   ========================================================= */
 app.post("/render-post", async (req, res) => {
   try {
     const {
       headline,
       subheadline = "",
-      kicker = "Economia & Mercado Imobiliário",
+      kicker = "A deadly collision",
       brand = "@rendarealcast",
       bg = ""
     } = req.body || {};
@@ -154,52 +87,98 @@ app.post("/render-post", async (req, res) => {
 
     const bgData = await toDataUri(bg);
 
+    /* =========================================================
+       SVG TEMPLATE — EDITE AQUI (TIPOGRAFIA / TAMANHOS)
+       ========================================================= */
     const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
   <defs>
+
+    <!-- Fonte serif editorial (substitui Georgia/Times) -->
     <style>
-      .brand { font: 700 18px Arial, Helvetica, sans-serif; fill: rgba(255,255,255,.75); }
-      .kicker { font: 700 18px Arial, Helvetica, sans-serif; letter-spacing:2px; fill: rgba(255,255,255,.75); }
-      .headline { font: 700 56px Georgia, "Times New Roman", serif; fill:#fff; }
-      .sub { font: italic 28px Georgia, "Times New Roman", serif; fill: rgba(255,255,255,.9); }
+      @font-face {
+        font-family: 'LibreBaskerville';
+        font-weight: 400;
+        src: local('Libre Baskerville');
+      }
+
+      .kicker {
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 22px;
+        letter-spacing: 1px;
+        fill: #ffffff;
+        opacity: .9;
+      }
+
+      .headline {
+        font-family: 'LibreBaskerville', Georgia, serif;
+        font-size: 74px;
+        line-height: 1.08;
+        fill: #ffffff;
+      }
+
+      .sub {
+        font-family: 'LibreBaskerville', Georgia, serif;
+        font-size: 30px;
+        line-height: 1.35;
+        fill: rgba(255,255,255,.92);
+        font-style: italic;
+      }
+
+      .brand {
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 18px;
+        fill: rgba(255,255,255,.7);
+      }
     </style>
 
     <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="rgba(0,0,0,.45)"/>
-      <stop offset="100%" stop-color="rgba(0,0,0,.2)"/>
+      <stop offset="0%" stop-color="rgba(0,0,0,.65)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,.25)"/>
     </linearGradient>
+
   </defs>
 
-  <rect width="100%" height="100%" fill="#0b0b0b"/>
+  <!-- FUNDO PRETO -->
+  <rect width="100%" height="100%" fill="#000"/>
 
-  ${bgData ? `
-  <image href="${bgData}"
-         x="0" y="${height * 0.46}"
-         width="${width}" height="${height * 0.54}"
-         preserveAspectRatio="xMidYMid slice"/>
-  <rect x="0" y="${height * 0.46}"
-        width="${width}" height="${height * 0.54}"
-        fill="url(#fade)"/>` : ""}
-
+  <!-- BLOCO DE TEXTO SUPERIOR -->
   <g transform="translate(90,120)">
-    <text class="brand" x="${width - 260}" y="-40">${esc(brand)}</text>
-    <text class="kicker">${esc(kicker).toUpperCase()}</text>
-    <rect y="18" width="110" height="4" fill="#e3120b"/>
+    <text class="kicker">${esc(kicker)}</text>
 
-    <text class="headline" y="90">
+    <text class="headline" y="95">
       <tspan x="0">${esc(headline)}</tspan>
     </text>
 
     ${subheadline ? `
-    <text class="sub" y="165">
+    <text class="sub" y="220">
       <tspan x="0">${esc(subheadline)}</tspan>
     </text>` : ""}
+
+    <text class="brand" x="${width - 260}" y="-40">${esc(brand)}</text>
   </g>
+
+  <!-- IMAGEM INFERIOR -->
+  ${bgData ? `
+  <image href="${bgData}"
+         x="0"
+         y="${height * 0.45}"
+         width="${width}"
+         height="${height * 0.55}"
+         preserveAspectRatio="xMidYMid slice"/>
+  <rect x="0"
+        y="${height * 0.45}"
+        width="${width}"
+        height="${height * 0.55}"
+        fill="url(#fade)"/>` : ""}
+
 </svg>`.trim();
 
-    const png = new Resvg(svg).render().asPng();
-    const id = crypto.randomUUID();
+    const png = new Resvg(svg, {
+      fitTo: { mode: "width", value: width }
+    }).render().asPng();
 
+    const id = crypto.randomUUID();
     store.set(id, {
       buf: Buffer.from(png),
       mime: "image/png",
@@ -209,7 +188,7 @@ app.post("/render-post", async (req, res) => {
     res.json({ url: `${baseUrl(req)}/img/${id}` });
 
   } catch (err) {
-    console.error("SVG_POST_ERROR:", err);
+    console.error("SVG_RENDER_ERROR:", err);
     res.status(500).json({ error: "render_post_failed" });
   }
 });
