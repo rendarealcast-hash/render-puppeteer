@@ -1,21 +1,27 @@
 import express from "express";
 import fetch from "node-fetch";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { Resvg } from "@resvg/resvg-js";
 
 const app = express();
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "6mb" }));
 
-/* =========================================================
-   STORE TEMPORÁRIO DE IMAGENS
-   ========================================================= */
-const store = new Map();
+/* ===================== PATHS ===================== */
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// você criou /font (singular)
+const FONTS_DIR = path.resolve(__dirname, "..", "font");
+
+/* ===================== IMAGE STORE ===================== */
+const store = new Map(); // id -> { buf, exp }
 
 setInterval(() => {
   const now = Date.now();
-  for (const [k, v] of store.entries()) {
-    if (v.exp < now) store.delete(k);
-  }
+  for (const [k, v] of store.entries()) if (v.exp < now) store.delete(k);
 }, 60_000);
 
 app.get("/img/:id", (req, res) => {
@@ -29,20 +35,20 @@ app.get("/img/:id", (req, res) => {
 app.get("/", (_, res) => res.send("ok"));
 app.get("/health", (_, res) => res.send("ok"));
 
-/* =========================================================
-   HELPERS
-   ========================================================= */
+/* ===================== HELPERS ===================== */
 const esc = (s = "") =>
-  String(s)
-    .replace(/&/g,"&amp;")
-    .replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;")
-    .replace(/"/g,"&quot;")
-    .replace(/'/g,"&#39;");
+  String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 function baseUrl(req) {
   const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https")
-    .toString().split(",")[0].trim();
+    .toString()
+    .split(",")[0]
+    .trim();
   const host = req.headers["x-forwarded-host"] || req.get("host");
   return `${proto}://${host}`;
 }
@@ -50,57 +56,111 @@ function baseUrl(req) {
 async function toDataUri(url) {
   if (!url) return "";
   const r = await fetch(url);
-  if (!r.ok) throw new Error("image fetch failed");
+  if (!r.ok) throw new Error(`image fetch failed: ${r.status}`);
   const buf = Buffer.from(await r.arrayBuffer());
   const ct = r.headers.get("content-type") || "image/jpeg";
   return `data:${ct};base64,${buf.toString("base64")}`;
 }
 
-/* =========================================================
-   FONTES — EMBUTIDAS SEMPRE (GARANTIA VISUAL)
-   ========================================================= */
-async function loadFonts() {
-  const fonts = [
-    // Rubik Medium 500 (kicker)
-    "family=Rubik:wght@500",
-    // Rubik Microbe (brand)
-    "family=Rubik+Microbe",
-    // Playfair Display (texto principal)
-    "family=Playfair+Display:ital,wght@0,400;1,400"
-  ].join("&");
-
-  const cssUrl = `https://fonts.googleapis.com/css2?${fonts}&display=swap`;
-  const cssRes = await fetch(cssUrl, {
-    headers: { "user-agent": "Mozilla/5.0 Chrome/120" }
-  });
-  const css = await cssRes.text();
-
-  const urls = [...css.matchAll(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+\.woff2)\)/g)]
-    .map(m => m[1]);
-
-  let out = css;
-  for (const u of urls) {
-    const r = await fetch(u);
-    const b = Buffer.from(await r.arrayBuffer()).toString("base64");
-    out = out.replaceAll(u, `data:font/woff2;base64,${b}`);
-  }
-  return out;
+function renderPng(svg, width = 1080) {
+  return new Resvg(svg, { fitTo: { mode: "width", value: width } }).render().asPng();
 }
 
-/* =========================================================
-   TEXT WRAP + LIMITE DE ALTURA
-   ========================================================= */
-function wrapText(text, maxWidthPx, fontSizePx) {
-  const approxChar = fontSizePx * 0.56;
-  const maxChars = Math.floor(maxWidthPx / approxChar);
-  const words = text.split(" ");
+function putImageAndReturnUrl(req, pngBuf, ttlMs = 30 * 60 * 1000) {
+  const id = crypto.randomUUID();
+  store.set(id, { buf: Buffer.from(pngBuf), exp: Date.now() + ttlMs });
+  return `${baseUrl(req)}/img/${id}`;
+}
+
+/* ===================== FONTS: LOCAL TTF (SEMPRE APLICADAS) ===================== */
+function readFontBase64(filename) {
+  const p = path.join(FONTS_DIR, filename);
+  if (!fs.existsSync(p)) return "";
+  return fs.readFileSync(p).toString("base64");
+}
+
+// Seus arquivos (.ttf)
+const TTF_PLAYFAIR_REG = readFontBase64("PlayfairDisplay-VariableFont_wght.ttf");
+const TTF_PLAYFAIR_ITAL = readFontBase64("PlayfairDisplay-Italic-VariableFont_wght.ttf");
+const TTF_RUBIK_BOLD = readFontBase64("Rubik-Bold.ttf");
+const TTF_RUBIK_MICROBE = readFontBase64("RubikMicrobe-Regular.ttf");
+
+// (não usados por enquanto)
+const TTF_LORA_REG = readFontBase64("Lora-VariableFont_wght.ttf");
+const TTF_LORA_ITAL = readFontBase64("Lora-Italic-VariableFont_wght.ttf");
+const TTF_RUBIK_EXTRABOLD = readFontBase64("Rubik-ExtraBold.ttf");
+
+function assertFontsPresent() {
+  const missing = [];
+  if (!TTF_PLAYFAIR_REG) missing.push("PlayfairDisplay-VariableFont_wght.ttf");
+  if (!TTF_PLAYFAIR_ITAL) missing.push("PlayfairDisplay-Italic-VariableFont_wght.ttf");
+  if (!TTF_RUBIK_BOLD) missing.push("Rubik-Bold.ttf");
+  if (!TTF_RUBIK_MICROBE) missing.push("RubikMicrobe-Regular.ttf");
+  return missing;
+}
+
+const LOCAL_FONT_CSS = `
+/* ===== LOCAL FONTS (TTF base64) ===== */
+@font-face{
+  font-family:'PlayfairDisplay';
+  font-style:normal;
+  font-weight:400;
+  src:url(data:font/ttf;base64,${TTF_PLAYFAIR_REG}) format('truetype');
+}
+@font-face{
+  font-family:'PlayfairDisplay';
+  font-style:italic;
+  font-weight:400;
+  src:url(data:font/ttf;base64,${TTF_PLAYFAIR_ITAL}) format('truetype');
+}
+@font-face{
+  font-family:'Rubik';
+  font-style:normal;
+  font-weight:700; /* você não tem 500 Medium, então usamos Bold */
+  src:url(data:font/ttf;base64,${TTF_RUBIK_BOLD}) format('truetype');
+}
+@font-face{
+  font-family:'RubikMicrobe';
+  font-style:normal;
+  font-weight:400;
+  src:url(data:font/ttf;base64,${TTF_RUBIK_MICROBE}) format('truetype');
+}
+
+/* ===== OPÇÕES (NÃO USADAS) =====
+@font-face{
+  font-family:'Lora';
+  font-style:normal;
+  font-weight:400;
+  src:url(data:font/ttf;base64,${TTF_LORA_REG}) format('truetype');
+}
+@font-face{
+  font-family:'Lora';
+  font-style:italic;
+  font-weight:400;
+  src:url(data:font/ttf;base64,${TTF_LORA_ITAL}) format('truetype');
+}
+@font-face{
+  font-family:'Rubik';
+  font-style:normal;
+  font-weight:800;
+  src:url(data:font/ttf;base64,${TTF_RUBIK_EXTRABOLD}) format('truetype');
+}
+*/
+`.trim();
+
+/* ===================== WRAP + FONT AUTO ===================== */
+function wrapByWords(text, maxWidthPx, fontSizePx, charFactor = 0.56) {
+  const t = String(text || "").trim().replace(/\s+/g, " ");
+  if (!t) return [];
+  const maxChars = Math.max(10, Math.floor(maxWidthPx / (fontSizePx * charFactor)));
+  const words = t.split(" ");
   const lines = [];
   let line = "";
 
   for (const w of words) {
-    const test = line ? `${line} ${w}` : w;
-    if (test.length <= maxChars) {
-      line = test;
+    const candidate = line ? `${line} ${w}` : w;
+    if (candidate.length <= maxChars) {
+      line = candidate;
     } else {
       if (line) lines.push(line);
       line = w;
@@ -110,88 +170,113 @@ function wrapText(text, maxWidthPx, fontSizePx) {
   return lines;
 }
 
-/* =========================================================
-   POST ÚNICO — DEFINITIVO
-   subheadline = TEXTO DO POST
-   headline = APENAS PARA LEGENDA (IGNORADO AQUI)
-   ========================================================= */
-app.post("/render-post", async (req, res) => {
-  try {
-    const {
-      subheadline,        // <-- TEXTO PRINCIPAL
-      kicker = "Mercado Imobiliário",
-      brand = "Renda Real Cast",
-      bg = ""
-    } = req.body || {};
+function tspans(lines, x, startDy, dy) {
+  return lines
+    .map((ln, i) => `<tspan x="${x}" dy="${i === 0 ? startDy : dy}">${esc(ln)}</tspan>`)
+    .join("");
+}
 
-    if (!subheadline) {
-      return res.status(400).json({ error: "subheadline_required" });
-    }
+function fitTextToBox({
+  text,
+  maxWidthPx,
+  maxHeightPx,
+  maxFont = 84,
+  minFont = 40,
+  lineHeightFactor = 1.12,
+  maxLines = 6,
+  charFactor = 0.56,
+}) {
+  const clean = String(text || "").trim();
+  if (!clean) return { fontSize: minFont, lineHeight: Math.round(minFont * lineHeightFactor), lines: [] };
 
-    const width = 1080;
-    const height = 1350;
-    const topArea = Math.round(height * 0.46);
-    const textWidth = width - 180;
+  for (let fs = maxFont; fs >= minFont; fs -= 2) {
+    const lh = Math.round(fs * lineHeightFactor);
+    const lines = wrapByWords(clean, maxWidthPx, fs, charFactor).slice(0, maxLines);
+    const h = lines.length * lh;
+    if (h <= maxHeightPx) return { fontSize: fs, lineHeight: lh, lines };
+  }
 
-    const fontCss = await loadFonts();
-    const bgData = await toDataUri(bg);
+  const fs = minFont;
+  const lh = Math.round(fs * lineHeightFactor);
+  return { fontSize: fs, lineHeight: lh, lines: wrapByWords(clean, maxWidthPx, fs, charFactor).slice(0, maxLines) };
+}
 
-    const fontSize = 64; // tamanho editorial forte
-    const lineHeight = Math.round(fontSize * 1.15);
-    const maxLines = Math.floor((topArea - 200) / lineHeight);
+/* ===================== TEMPLATES ===================== */
+function buildRenderPostSvg({ width, height, kicker, brand, mainText, bgDataUri }) {
+  // topo/imagem igual ao seu original (~46% texto / 54% imagem)
+  const topArea = Math.round(height * 0.46);
+  const leftPad = 90;
+  const rightPad = 90;
+  const textW = width - leftPad - rightPad;
 
-    const lines = wrapText(subheadline, textWidth, fontSize).slice(0, maxLines);
+  // reservas (kicker + rule + respiro)
+  const yStart = 120;
+  const ruleY = yStart + 18;
+  const headlineY = yStart + 90;
 
-    const tspans = lines.map((l, i) =>
-      `<tspan x="0" dy="${i === 0 ? 0 : lineHeight}">${esc(l)}</tspan>`
-    ).join("");
+  const availableTextH = topArea - headlineY - 40; // espaço real antes da imagem
 
-    const svg = `
+  const fitted = fitTextToBox({
+    text: mainText,
+    maxWidthPx: textW,
+    maxHeightPx: availableTextH,
+    maxFont: 84,
+    minFont: 44,
+    lineHeightFactor: 1.12,
+    maxLines: 6,
+    charFactor: 0.56,
+  });
+
+  return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
   <defs>
     <style>
-      ${fontCss}
+      ${LOCAL_FONT_CSS}
 
       .kicker{
-        font-family:Rubik,Arial,Helvetica,sans-serif;
-        font-weight:500;
-        font-size:22px;
-        letter-spacing:1px;
-        fill:rgba(255,255,255,.9);
+        font-family: Rubik, Arial, sans-serif;
+        font-weight: 700;
+        font-size: 22px;
+        letter-spacing: 1px;
+        fill: rgba(255,255,255,.92);
       }
-      .headline{
-        font-family:"Playfair Display",serif;
-        font-size:${fontSize}px;
-        fill:#fff;
+      .main{
+        font-family: PlayfairDisplay, serif;
+        font-weight: 400;
+        font-style: normal;
+        font-size: ${fitted.fontSize}px;
+        fill: #fff;
       }
       .brand{
-        font-family:"Rubik Microbe",Rubik,Arial,sans-serif;
-        font-size:18px;
-        fill:rgba(255,255,255,.7);
+        font-family: RubikMicrobe, Rubik, Arial, sans-serif;
+        font-weight: 400;
+        font-size: 18px;
+        fill: rgba(255,255,255,.70);
       }
     </style>
 
     <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="rgba(0,0,0,.65)"/>
-      <stop offset="100%" stop-color="rgba(0,0,0,.25)"/>
+      <stop offset="0%" stop-color="rgba(0,0,0,.70)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,.20)"/>
     </linearGradient>
   </defs>
 
   <rect width="100%" height="100%" fill="#000"/>
 
-  <!-- brand -->
-  <text class="brand" x="${width - 120}" y="60" text-anchor="end">${esc(brand)}</text>
+  <!-- brand (mais margem da direita) -->
+  <text class="brand" x="${width - 130}" y="60" text-anchor="end">${esc(brand)}</text>
 
-  <!-- texto -->
-  <g transform="translate(90,120)">
-    <text class="kicker">${esc(kicker)}</text>
-    <rect y="18" width="110" height="4" fill="#e3120b"/>
-    <text class="headline" y="90">${tspans}</text>
+  <g transform="translate(${leftPad},0)">
+    <text class="kicker" y="${yStart}">${esc(kicker)}</text>
+    <rect x="0" y="${ruleY}" width="110" height="4" fill="#e3120b"/>
+
+    <text class="main" y="${headlineY}">
+      ${tspans(fitted.lines, 0, 0, fitted.lineHeight)}
+    </text>
   </g>
 
-  <!-- imagem -->
-  ${bgData ? `
-  <image href="${bgData}"
+  ${bgDataUri ? `
+  <image href="${bgDataUri}"
          x="0" y="${topArea}"
          width="${width}" height="${height - topArea}"
          preserveAspectRatio="xMidYMid slice"/>
@@ -200,18 +285,141 @@ app.post("/render-post", async (req, res) => {
         fill="url(#fade)"/>` : ""}
 
 </svg>`.trim();
+}
 
-    const png = new Resvg(svg).render().asPng();
-    const id = crypto.randomUUID();
-    store.set(id, { buf: Buffer.from(png), mime: "image/png", exp: Date.now() + 30 * 60 * 1000 });
+function buildCarouselSlideSvg({ width, height, slideText, idx, total }) {
+  const fitted = fitTextToBox({
+    text: slideText,
+    maxWidthPx: 920,
+    maxHeightPx: 380,
+    maxFont: 76,
+    minFont: 46,
+    lineHeightFactor: 1.12,
+    maxLines: 6,
+    charFactor: 0.52,
+  });
 
-    res.json({ url: `${baseUrl(req)}/img/${id}` });
+  const progress = Math.round(((idx + 1) / total) * 100);
 
-  } catch (err) {
-    console.error("RENDER_ERROR:", err);
+  return `
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+  <defs>
+    <style>
+      ${LOCAL_FONT_CSS}
+      .badge{font-family:Rubik,Arial,sans-serif;font-weight:700;font-size:26px;letter-spacing:1px;fill:rgba(255,255,255,.8)}
+      .h1{font-family:Rubik,Arial,sans-serif;font-weight:700;font-size:${fitted.fontSize}px;fill:#fff}
+      .p{font-family:Rubik,Arial,sans-serif;font-weight:400;font-size:36px;fill:rgba(255,255,255,.9)}
+      .footer{font-family:Rubik,Arial,sans-serif;font-weight:400;font-size:24px;fill:rgba(255,255,255,.7)}
+    </style>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1c2d"/>
+      <stop offset="100%" stop-color="#0f2a44"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="100%" height="100%" fill="url(#grad)"/>
+
+  <g transform="translate(80,90)">
+    <text class="badge">Renda Real Cast ${idx + 1} / ${total}</text>
+
+    <text class="h1" y="150">
+      ${tspans(fitted.lines, 0, 0, fitted.lineHeight)}
+    </text>
+
+    <text class="p" y="520">Economia e Imóveis em 3 min!</text>
+
+    <g transform="translate(0,760)">
+      <text class="footer">@rendarealcast</text>
+      <text class="footer" x="780">Arraste →</text>
+      <rect y="24" width="920" height="6" rx="3" fill="rgba(255,255,255,.15)"/>
+      <rect y="24" width="${(920 * progress) / 100}" height="6" rx="3" fill="#4da3ff"/>
+    </g>
+  </g>
+</svg>`.trim();
+}
+
+/* ===================== ENDPOINTS ===================== */
+
+/** CARROSSEL: { slides: [...] } -> { urls: [...] } */
+app.post("/render", async (req, res) => {
+  const slides = req.body?.slides;
+  if (!Array.isArray(slides) || !slides.length) {
+    return res.status(400).json({ error: "Body must include { slides: [...] }" });
+  }
+
+  try {
+    const missing = assertFontsPresent();
+    if (missing.length) {
+      return res.status(500).json({
+        error: "fonts_missing",
+        message: `Missing fonts in /font: ${missing.join(", ")}`
+      });
+    }
+
+    const width = 1080, height = 1080;
+    const urls = [];
+
+    for (let i = 0; i < slides.length; i++) {
+      const svg = buildCarouselSlideSvg({
+        width,
+        height,
+        slideText: String(slides[i] ?? ""),
+        idx: i,
+        total: slides.length,
+      });
+      const png = renderPng(svg, width);
+      urls.push(putImageAndReturnUrl(req, png));
+    }
+
+    res.json({ urls });
+  } catch (e) {
+    console.error("CAROUSEL_RENDER_ERROR:", e);
+    res.status(500).json({ error: "render_failed" });
+  }
+});
+
+/**
+ * POST ÚNICO: { subheadline, kicker?, brand?, bg? } -> { url }
+ * IMPORTANTE: subheadline é o TEXTO PRINCIPAL da imagem
+ * headline fica só na legenda no n8n (fora do server)
+ */
+app.post("/render-post", async (req, res) => {
+  try {
+    const subheadline = String(req.body?.subheadline ?? "").trim();
+    const kicker = String(req.body?.kicker ?? "Mercado Imobiliário").trim();
+    const brand = String(req.body?.brand ?? "Renda Real Cast").trim();
+    const bg = String(req.body?.bg ?? "").trim();
+
+    if (!subheadline) return res.status(400).json({ error: "subheadline_required" });
+
+    const missing = assertFontsPresent();
+    if (missing.length) {
+      return res.status(500).json({
+        error: "fonts_missing",
+        message: `Missing fonts in /font: ${missing.join(", ")}`
+      });
+    }
+
+    const width = 1080, height = 1350;
+    const bgDataUri = await toDataUri(bg);
+
+    const svg = buildRenderPostSvg({
+      width,
+      height,
+      kicker,
+      brand,
+      mainText: subheadline,
+      bgDataUri
+    });
+
+    const png = renderPng(svg, width);
+    const url = putImageAndReturnUrl(req, png);
+    res.json({ url });
+  } catch (e) {
+    console.error("POST_RENDER_ERROR:", e);
     res.status(500).json({ error: "render_post_failed" });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("SVG server running on", PORT));
+app.listen(PORT, () => console.log("Listening on", PORT));
