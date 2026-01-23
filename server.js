@@ -9,16 +9,15 @@ import { Resvg } from "@resvg/resvg-js";
 const app = express();
 app.use(express.json({ limit: "6mb" }));
 
-/* ===================== PATHS ===================== */
+/* ===================== PATHS (ESM-safe) ===================== */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// você criou /font (singular)
-const FONTS_DIR = path.resolve(__dirname, "..", "font");
+// ✅ SUA PASTA REAL: /fonts (plural)
+const FONTS_DIR = path.resolve(__dirname, "..", "fonts");
 
 /* ===================== IMAGE STORE ===================== */
 const store = new Map(); // id -> { buf, exp }
-
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of store.entries()) if (v.exp < now) store.delete(k);
@@ -72,33 +71,37 @@ function putImageAndReturnUrl(req, pngBuf, ttlMs = 30 * 60 * 1000) {
   return `${baseUrl(req)}/img/${id}`;
 }
 
-/* ===================== FONTS: LOCAL TTF (SEMPRE APLICADAS) ===================== */
+/* ===================== FONTS: LOCAL TTF ===================== */
 function readFontBase64(filename) {
   const p = path.join(FONTS_DIR, filename);
   if (!fs.existsSync(p)) return "";
   return fs.readFileSync(p).toString("base64");
 }
 
-// Seus arquivos (.ttf)
+// ✅ NOMES EXATOS dos arquivos que você disse que subiu
 const TTF_PLAYFAIR_REG = readFontBase64("PlayfairDisplay-VariableFont_wght.ttf");
 const TTF_PLAYFAIR_ITAL = readFontBase64("PlayfairDisplay-Italic-VariableFont_wght.ttf");
-const TTF_RUBIK_BOLD = readFontBase64("Rubik-Bold.ttf");
-const TTF_RUBIK_MICROBE = readFontBase64("RubikMicrobe-Regular.ttf");
-
-// (não usados por enquanto)
 const TTF_LORA_REG = readFontBase64("Lora-VariableFont_wght.ttf");
 const TTF_LORA_ITAL = readFontBase64("Lora-Italic-VariableFont_wght.ttf");
+const TTF_RUBIK_BOLD = readFontBase64("Rubik-Bold.ttf");
 const TTF_RUBIK_EXTRABOLD = readFontBase64("Rubik-ExtraBold.ttf");
+const TTF_RUBIK_MICROBE = readFontBase64("RubikMicrobe-Regular.ttf");
 
-function assertFontsPresent() {
-  const missing = [];
-  if (!TTF_PLAYFAIR_REG) missing.push("PlayfairDisplay-VariableFont_wght.ttf");
-  if (!TTF_PLAYFAIR_ITAL) missing.push("PlayfairDisplay-Italic-VariableFont_wght.ttf");
-  if (!TTF_RUBIK_BOLD) missing.push("Rubik-Bold.ttf");
-  if (!TTF_RUBIK_MICROBE) missing.push("RubikMicrobe-Regular.ttf");
-  return missing;
+function missingFonts() {
+  const miss = [];
+  if (!TTF_PLAYFAIR_REG) miss.push("PlayfairDisplay-VariableFont_wght.ttf");
+  if (!TTF_PLAYFAIR_ITAL) miss.push("PlayfairDisplay-Italic-VariableFont_wght.ttf");
+  if (!TTF_RUBIK_BOLD) miss.push("Rubik-Bold.ttf");
+  if (!TTF_RUBIK_MICROBE) miss.push("RubikMicrobe-Regular.ttf");
+  return miss;
 }
 
+/**
+ * Nota:
+ * - Você queria Rubik Medium 500, mas você não subiu um arquivo Rubik 500.
+ * - Então kicker vai usar Rubik Bold (700).
+ * - Se você adicionar Rubik-Medium.ttf depois, eu ajusto em 10s.
+ */
 const LOCAL_FONT_CSS = `
 /* ===== LOCAL FONTS (TTF base64) ===== */
 @font-face{
@@ -116,8 +119,14 @@ const LOCAL_FONT_CSS = `
 @font-face{
   font-family:'Rubik';
   font-style:normal;
-  font-weight:700; /* você não tem 500 Medium, então usamos Bold */
+  font-weight:700;
   src:url(data:font/ttf;base64,${TTF_RUBIK_BOLD}) format('truetype');
+}
+@font-face{
+  font-family:'Rubik';
+  font-style:normal;
+  font-weight:800;
+  src:url(data:font/ttf;base64,${TTF_RUBIK_EXTRABOLD}) format('truetype');
 }
 @font-face{
   font-family:'RubikMicrobe';
@@ -126,7 +135,7 @@ const LOCAL_FONT_CSS = `
   src:url(data:font/ttf;base64,${TTF_RUBIK_MICROBE}) format('truetype');
 }
 
-/* ===== OPÇÕES (NÃO USADAS) =====
+/* ===== OPÇÕES (DISPONÍVEIS, NÃO USADAS AGORA) =====
 @font-face{
   font-family:'Lora';
   font-style:normal;
@@ -139,16 +148,10 @@ const LOCAL_FONT_CSS = `
   font-weight:400;
   src:url(data:font/ttf;base64,${TTF_LORA_ITAL}) format('truetype');
 }
-@font-face{
-  font-family:'Rubik';
-  font-style:normal;
-  font-weight:800;
-  src:url(data:font/ttf;base64,${TTF_RUBIK_EXTRABOLD}) format('truetype');
-}
 */
 `.trim();
 
-/* ===================== WRAP + FONT AUTO ===================== */
+/* ===================== WRAP + AUTO FIT ===================== */
 function wrapByWords(text, maxWidthPx, fontSizePx, charFactor = 0.56) {
   const t = String(text || "").trim().replace(/\s+/g, " ");
   if (!t) return [];
@@ -187,7 +190,10 @@ function fitTextToBox({
   charFactor = 0.56,
 }) {
   const clean = String(text || "").trim();
-  if (!clean) return { fontSize: minFont, lineHeight: Math.round(minFont * lineHeightFactor), lines: [] };
+  if (!clean) {
+    const lh = Math.round(minFont * lineHeightFactor);
+    return { fontSize: minFont, lineHeight: lh, lines: [] };
+  }
 
   for (let fs = maxFont; fs >= minFont; fs -= 2) {
     const lh = Math.round(fs * lineHeightFactor);
@@ -198,23 +204,31 @@ function fitTextToBox({
 
   const fs = minFont;
   const lh = Math.round(fs * lineHeightFactor);
-  return { fontSize: fs, lineHeight: lh, lines: wrapByWords(clean, maxWidthPx, fs, charFactor).slice(0, maxLines) };
+  return {
+    fontSize: fs,
+    lineHeight: lh,
+    lines: wrapByWords(clean, maxWidthPx, fs, charFactor).slice(0, maxLines),
+  };
 }
 
 /* ===================== TEMPLATES ===================== */
+/**
+ * POST ÚNICO (Economist-ish)
+ * ✅ subheadline = texto principal da imagem
+ * ❌ headline não aparece aqui (vai na legenda do n8n)
+ */
 function buildRenderPostSvg({ width, height, kicker, brand, mainText, bgDataUri }) {
-  // topo/imagem igual ao seu original (~46% texto / 54% imagem)
   const topArea = Math.round(height * 0.46);
   const leftPad = 90;
   const rightPad = 90;
   const textW = width - leftPad - rightPad;
 
-  // reservas (kicker + rule + respiro)
   const yStart = 120;
   const ruleY = yStart + 18;
-  const headlineY = yStart + 90;
+  const textY = yStart + 90;
 
-  const availableTextH = topArea - headlineY - 40; // espaço real antes da imagem
+  // espaço real antes da imagem (nunca invade)
+  const availableTextH = topArea - textY - 40;
 
   const fitted = fitTextToBox({
     text: mainText,
@@ -270,7 +284,7 @@ function buildRenderPostSvg({ width, height, kicker, brand, mainText, bgDataUri 
     <text class="kicker" y="${yStart}">${esc(kicker)}</text>
     <rect x="0" y="${ruleY}" width="110" height="4" fill="#e3120b"/>
 
-    <text class="main" y="${headlineY}">
+    <text class="main" y="${textY}">
       ${tspans(fitted.lines, 0, 0, fitted.lineHeight)}
     </text>
   </g>
@@ -287,6 +301,7 @@ function buildRenderPostSvg({ width, height, kicker, brand, mainText, bgDataUri 
 </svg>`.trim();
 }
 
+/** CARROSSEL (estilo original) */
 function buildCarouselSlideSvg({ width, height, slideText, idx, total }) {
   const fitted = fitTextToBox({
     text: slideText,
@@ -340,22 +355,21 @@ function buildCarouselSlideSvg({ width, height, slideText, idx, total }) {
 
 /* ===================== ENDPOINTS ===================== */
 
-/** CARROSSEL: { slides: [...] } -> { urls: [...] } */
 app.post("/render", async (req, res) => {
   const slides = req.body?.slides;
   if (!Array.isArray(slides) || !slides.length) {
     return res.status(400).json({ error: "Body must include { slides: [...] }" });
   }
 
-  try {
-    const missing = assertFontsPresent();
-    if (missing.length) {
-      return res.status(500).json({
-        error: "fonts_missing",
-        message: `Missing fonts in /font: ${missing.join(", ")}`
-      });
-    }
+  const miss = missingFonts();
+  if (miss.length) {
+    return res.status(500).json({
+      error: "fonts_missing",
+      message: `Missing fonts in /fonts: ${miss.join(", ")}`
+    });
+  }
 
+  try {
     const width = 1080, height = 1080;
     const urls = [];
 
@@ -378,28 +392,24 @@ app.post("/render", async (req, res) => {
   }
 });
 
-/**
- * POST ÚNICO: { subheadline, kicker?, brand?, bg? } -> { url }
- * IMPORTANTE: subheadline é o TEXTO PRINCIPAL da imagem
- * headline fica só na legenda no n8n (fora do server)
- */
 app.post("/render-post", async (req, res) => {
+  // ✅ subheadline é o TEXTO do post
+  const subheadline = String(req.body?.subheadline ?? "").trim();
+  const kicker = String(req.body?.kicker ?? "Mercado Imobiliário").trim();
+  const brand = String(req.body?.brand ?? "Renda Real Cast").trim();
+  const bg = String(req.body?.bg ?? "").trim();
+
+  if (!subheadline) return res.status(400).json({ error: "subheadline_required" });
+
+  const miss = missingFonts();
+  if (miss.length) {
+    return res.status(500).json({
+      error: "fonts_missing",
+      message: `Missing fonts in /fonts: ${miss.join(", ")}`
+    });
+  }
+
   try {
-    const subheadline = String(req.body?.subheadline ?? "").trim();
-    const kicker = String(req.body?.kicker ?? "Mercado Imobiliário").trim();
-    const brand = String(req.body?.brand ?? "Renda Real Cast").trim();
-    const bg = String(req.body?.bg ?? "").trim();
-
-    if (!subheadline) return res.status(400).json({ error: "subheadline_required" });
-
-    const missing = assertFontsPresent();
-    if (missing.length) {
-      return res.status(500).json({
-        error: "fonts_missing",
-        message: `Missing fonts in /font: ${missing.join(", ")}`
-      });
-    }
-
     const width = 1080, height = 1350;
     const bgDataUri = await toDataUri(bg);
 
