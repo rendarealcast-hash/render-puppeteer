@@ -7,20 +7,23 @@ import { fileURLToPath } from "url";
 import { Resvg } from "@resvg/resvg-js";
 
 const app = express();
-app.use(express.json({ limit: "6mb" }));
+app.use(express.json({ limit: "5mb" }));
 
-/* ================= PATHS ================= */
+/* ================= PATH ================= */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const FONTS_DIR = path.resolve(__dirname, "fonts");
+const FONTS_DIR = path.join(__dirname, "fonts");
 
-/* ================= LOAD FONTS (BUFFER) ================= */
+/* ================= LOAD FONTS (STATIC) ================= */
 function loadFont(file) {
   const p = path.join(FONTS_DIR, file);
-  if (!fs.existsSync(p)) throw new Error(`FONT_MISSING: ${file}`);
+  if (!fs.existsSync(p)) {
+    throw new Error(`FONT_NOT_FOUND: ${file}`);
+  }
   return fs.readFileSync(p);
 }
 
+// 🔒 NOMES INTERNOS FIXOS (anti fallback)
 const FONT_PLAYFAIR = loadFont("PlayfairDisplay-Regular.ttf");
 const FONT_RUBIK_BOLD = loadFont("Rubik-Bold.ttf");
 const FONT_RUBIK_MICROBE = loadFont("RubikMicrobe-Regular.ttf");
@@ -29,44 +32,56 @@ const FONT_RUBIK_MICROBE = loadFont("RubikMicrobe-Regular.ttf");
 const store = new Map();
 setInterval(() => {
   const now = Date.now();
-  for (const [k, v] of store.entries()) if (v.exp < now) store.delete(k);
+  for (const [k, v] of store.entries()) {
+    if (v.exp < now) store.delete(k);
+  }
 }, 60_000);
 
 app.get("/img/:id", (req, res) => {
   const v = store.get(req.params.id);
   if (!v) return res.status(404).send("not found");
   res.setHeader("Content-Type", "image/png");
+  res.setHeader("Cache-Control", "public, max-age=600");
   res.send(v.buf);
 });
 
 app.get("/", (_, res) => res.send("ok"));
+app.get("/health", (_, res) => res.send("ok"));
 
 /* ================= HELPERS ================= */
 const esc = (s = "") =>
-  String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-
-async function toDataUri(url) {
-  if (!url) return "";
-  const r = await fetch(url);
-  const buf = Buffer.from(await r.arrayBuffer());
-  const ct = r.headers.get("content-type") || "image/jpeg";
-  return `data:${ct};base64,${buf.toString("base64")}`;
-}
+  String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 
 function baseUrl(req) {
   const proto = (req.headers["x-forwarded-proto"] || "https").split(",")[0];
   return `${proto}://${req.get("host")}`;
 }
 
+async function toDataUri(url) {
+  if (!url) return "";
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("BG_FETCH_FAILED");
+  const buf = Buffer.from(await r.arrayBuffer());
+  const ct = r.headers.get("content-type") || "image/jpeg";
+  return `data:${ct};base64,${buf.toString("base64")}`;
+}
+
 /* ================= TEXT WRAP ================= */
 function wrap(text, maxChars) {
-  const words = text.split(" ");
+  const words = text.trim().split(/\s+/);
   const lines = [];
   let line = "";
   for (const w of words) {
-    const t = line ? `${line} ${w}` : w;
+    const t = line ? line + " " + w : w;
     if (t.length <= maxChars) line = t;
-    else { if (line) lines.push(line); line = w; }
+    else {
+      if (line) lines.push(line);
+      line = w;
+    }
   }
   if (line) lines.push(line);
   return lines;
@@ -74,43 +89,55 @@ function wrap(text, maxChars) {
 
 /* ================= SVG TEMPLATE ================= */
 function buildSVG({ subheadline, kicker, brand, bg }) {
-  const WIDTH = 1080;
-  const HEIGHT = 1350;
-  const TOP = Math.floor(HEIGHT * 0.46);
+  const W = 1080;
+  const H = 1350;
+  const TOP = Math.floor(H * 0.46);
 
   const lines = wrap(subheadline, 32).slice(0, 6);
 
   return `
-<svg width="${WIDTH}" height="${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
   <rect width="100%" height="100%" fill="#000"/>
 
-  <text x="90" y="120"
-        font-family="Rubik"
-        font-weight="700"
-        font-size="22"
-        fill="#fff"
-        letter-spacing="1">
-    ${esc(kicker)}
-  </text>
-
-  <rect x="90" y="138" width="110" height="4" fill="#e3120b"/>
-
-  <text x="90" y="210"
-        font-family="PlayfairDisplay"
-        font-size="64"
-        fill="#fff">
-    ${lines.map((l,i)=>`<tspan x="90" dy="${i?72:0}">${esc(l)}</tspan>`).join("")}
-  </text>
-
-  <text x="${WIDTH-120}" y="60"
-        font-family="RubikMicrobe"
+  <!-- BRAND -->
+  <text x="${W - 120}" y="60"
+        font-family="RRC_BRAND"
         font-size="18"
         fill="rgba(255,255,255,.7)"
         text-anchor="end">
     ${esc(brand)}
   </text>
 
-  ${bg ? `<image href="${bg}" x="0" y="${TOP}" width="${WIDTH}" height="${HEIGHT-TOP}" preserveAspectRatio="xMidYMid slice"/>` : ""}
+  <!-- KICKER -->
+  <text x="90" y="120"
+        font-family="RRC_KICKER"
+        font-size="22"
+        font-weight="700"
+        letter-spacing="1"
+        fill="#fff">
+    ${esc(kicker)}
+  </text>
+
+  <rect x="90" y="138" width="110" height="4" fill="#e3120b"/>
+
+  <!-- MAIN TEXT -->
+  <text x="90" y="210"
+        font-family="RRC_MAIN"
+        font-size="64"
+        fill="#fff">
+    ${lines
+      .map(
+        (l, i) =>
+          `<tspan x="90" dy="${i === 0 ? 0 : 72}">${esc(l)}</tspan>`
+      )
+      .join("")}
+  </text>
+
+  ${bg ? `
+  <image href="${bg}"
+         x="0" y="${TOP}"
+         width="${W}" height="${H - TOP}"
+         preserveAspectRatio="xMidYMid slice"/>` : ""}
 </svg>
 `.trim();
 }
@@ -119,30 +146,36 @@ function buildSVG({ subheadline, kicker, brand, bg }) {
 app.post("/render-post", async (req, res) => {
   try {
     const { subheadline, kicker, brand, bg } = req.body;
-    if (!subheadline) return res.status(400).json({ error: "subheadline_required" });
+    if (!subheadline) {
+      return res.status(400).json({ error: "subheadline_required" });
+    }
 
     const bgData = await toDataUri(bg);
     const svg = buildSVG({ subheadline, kicker, brand, bg: bgData });
 
     const png = new Resvg(svg, {
       fonts: [
-        { name: "PlayfairDisplay", data: FONT_PLAYFAIR },
-        { name: "Rubik", data: FONT_RUBIK_BOLD },
-        { name: "RubikMicrobe", data: FONT_RUBIK_MICROBE }
+        { name: "RRC_MAIN", data: FONT_PLAYFAIR },
+        { name: "RRC_KICKER", data: FONT_RUBIK_BOLD },
+        { name: "RRC_BRAND", data: FONT_RUBIK_MICROBE }
       ],
       fitTo: { mode: "width", value: 1080 }
-    }).render().asPng();
+    })
+      .render()
+      .asPng();
 
     const id = crypto.randomUUID();
-    store.set(id, { buf: png, exp: Date.now() + 30*60*1000 });
+    store.set(id, { buf: png, exp: Date.now() + 30 * 60 * 1000 });
 
     res.json({ url: `${baseUrl(req)}/img/${id}` });
-  } catch (e) {
-    console.error("RENDER_ERROR:", e);
-    res.status(500).json({ error: e.message });
+  } catch (err) {
+    console.error("RENDER_ERROR:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
 /* ================= START ================= */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server running with fixed fonts"));
+app.listen(PORT, () =>
+  console.log("SERVER OK — fonts locked, no fallback")
+);
