@@ -21,7 +21,7 @@ function loadFont(file) {
   return fs.readFileSync(p);
 }
 
-const FONT_PLAYFAIR = loadFont("PlayfairDisplay-VariableFont_wght.ttf");
+const FONT_PLAYFAIR = loadFont("PlayfairDisplay-Regular.ttf");
 const FONT_RUBIK_BOLD = loadFont("Rubik-Bold.ttf");
 const FONT_RUBIK_MICROBE = loadFont("RubikMicrobe-Regular.ttf");
 
