@@ -106,9 +106,9 @@ function buildSVG({ subheadline, kicker, brand, bg }) {
   <rect width="100%" height="100%" fill="#000"/>
 
   <!-- BRAND -->
-  <text x="${W - 110}" y="80"
+  <text x="${W - 130}" y="80"
         font-family="Rubik Microbe"
-        font-size="28"
+        font-size="32"
         fill="rgba(255,255,255,.7)"
         text-anchor="end">
     ${esc(brand)}
@@ -118,7 +118,7 @@ function buildSVG({ subheadline, kicker, brand, bg }) {
   <text x="90" y="130"
         font-family="Rubik"
         font-weight="700"
-        font-size="24"
+        font-size="32"
         letter-spacing="1.5"
         fill="#fff">
     ${esc(kicker)}
@@ -130,7 +130,7 @@ function buildSVG({ subheadline, kicker, brand, bg }) {
   <text x="90" y="230"
         font-family="Playfair Display"
         font-weight="600"
-        font-size="64"
+        font-size="69"
         fill="#fff">
     ${lines
       .map(
