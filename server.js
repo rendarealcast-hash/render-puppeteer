@@ -14,19 +14,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const FONTS_DIR = path.join(__dirname, "fonts");
 
-/* ================= LOAD FONTS (STATIC) ================= */
-function loadFont(file) {
-  const p = path.join(FONTS_DIR, file);
-  if (!fs.existsSync(p)) {
-    throw new Error(`FONT_NOT_FOUND: ${file}`);
-  }
-  return fs.readFileSync(p);
-}
+/* ================= FONT FILES ================= */
+const FONT_PLAYFAIR = path.join(
+  FONTS_DIR,
+  "PlayfairDisplay-VariableFont_wght.ttf"
+);
+const FONT_RUBIK_BOLD = path.join(FONTS_DIR, "Rubik-Bold.ttf");
+const FONT_RUBIK_MICROBE = path.join(
+  FONTS_DIR,
+  "RubikMicrobe-Regular.ttf"
+);
 
-// 🔒 NOMES INTERNOS FIXOS (anti fallback)
-const FONT_PLAYFAIR = loadFont("PlayfairDisplay-Regular.ttf");
-const FONT_RUBIK_BOLD = loadFont("Rubik-Bold.ttf");
-const FONT_RUBIK_MICROBE = loadFont("RubikMicrobe-Regular.ttf");
+// valida fontes
+for (const f of [FONT_PLAYFAIR, FONT_RUBIK_BOLD, FONT_RUBIK_MICROBE]) {
+  if (!fs.existsSync(f)) {
+    throw new Error(`FONT_NOT_FOUND: ${path.basename(f)}`);
+  }
+}
 
 /* ================= IMAGE STORE ================= */
 const store = new Map();
@@ -75,10 +79,12 @@ function wrap(text, maxChars) {
   const words = text.trim().split(/\s+/);
   const lines = [];
   let line = "";
+
   for (const w of words) {
-    const t = line ? line + " " + w : w;
-    if (t.length <= maxChars) line = t;
-    else {
+    const test = line ? `${line} ${w}` : w;
+    if (test.length <= maxChars) {
+      line = test;
+    } else {
       if (line) lines.push(line);
       line = w;
     }
@@ -93,51 +99,55 @@ function buildSVG({ subheadline, kicker, brand, bg }) {
   const H = 1350;
   const TOP = Math.floor(H * 0.46);
 
-  const lines = wrap(subheadline, 32).slice(0, 6);
+  const lines = wrap(subheadline, 22).slice(0, 6);
 
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
   <rect width="100%" height="100%" fill="#000"/>
 
   <!-- BRAND -->
-  <text x="${W - 120}" y="60"
-        font-family="RRC_BRAND"
-        font-size="18"
+  <text x="${W - 90}" y="70"
+        font-family="Rubik Microbe"
+        font-size="20"
         fill="rgba(255,255,255,.7)"
         text-anchor="end">
     ${esc(brand)}
   </text>
 
   <!-- KICKER -->
-  <text x="90" y="120"
-        font-family="RRC_KICKER"
-        font-size="22"
+  <text x="90" y="130"
+        font-family="Rubik"
         font-weight="700"
-        letter-spacing="1"
+        font-size="24"
+        letter-spacing="1.5"
         fill="#fff">
     ${esc(kicker)}
   </text>
 
-  <rect x="90" y="138" width="110" height="4" fill="#e3120b"/>
+  <rect x="90" y="148" width="120" height="4" fill="#e3120b"/>
 
-  <!-- MAIN TEXT -->
-  <text x="90" y="210"
-        font-family="RRC_MAIN"
+  <!-- SUBHEADLINE -->
+  <text x="90" y="230"
+        font-family="Playfair Display"
+        font-weight="600"
         font-size="64"
         fill="#fff">
     ${lines
       .map(
         (l, i) =>
-          `<tspan x="90" dy="${i === 0 ? 0 : 72}">${esc(l)}</tspan>`
+          `<tspan x="90" dy="${i === 0 ? 0 : "1.15em"}">${esc(l)}</tspan>`
       )
       .join("")}
   </text>
 
-  ${bg ? `
-  <image href="${bg}"
+  ${
+    bg
+      ? `<image href="${bg}"
          x="0" y="${TOP}"
          width="${W}" height="${H - TOP}"
-         preserveAspectRatio="xMidYMid slice"/>` : ""}
+         preserveAspectRatio="xMidYMid slice"/>`
+      : ""
+  }
 </svg>
 `.trim();
 }
@@ -146,20 +156,25 @@ function buildSVG({ subheadline, kicker, brand, bg }) {
 app.post("/render-post", async (req, res) => {
   try {
     const { subheadline, kicker, brand, bg } = req.body;
+
     if (!subheadline) {
       return res.status(400).json({ error: "subheadline_required" });
     }
 
     const bgData = await toDataUri(bg);
-    const svg = buildSVG({ subheadline, kicker, brand, bg: bgData });
+    const svg = buildSVG({
+      subheadline,
+      kicker,
+      brand,
+      bg: bgData,
+    });
 
     const png = new Resvg(svg, {
-      fonts: [
-        { name: "RRC_MAIN", data: FONT_PLAYFAIR },
-        { name: "RRC_KICKER", data: FONT_RUBIK_BOLD },
-        { name: "RRC_BRAND", data: FONT_RUBIK_MICROBE }
-      ],
-      fitTo: { mode: "width", value: 1080 }
+      font: {
+        loadSystemFonts: false,
+        fontFiles: [FONT_PLAYFAIR, FONT_RUBIK_BOLD, FONT_RUBIK_MICROBE],
+      },
+      fitTo: { mode: "width", value: 1080 },
     })
       .render()
       .asPng();
@@ -169,13 +184,13 @@ app.post("/render-post", async (req, res) => {
 
     res.json({ url: `${baseUrl(req)}/img/${id}` });
   } catch (err) {
-    console.error("RENDER_ERROR:", err.message);
+    console.error("RENDER_ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
 /* ================= START ================= */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log("SERVER OK — fonts locked, no fallback")
-);
+app.listen(PORT, () => {
+  console.log("SERVER OK — fonts locked, wrap stable, no fallback");
+});
