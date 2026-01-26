@@ -106,9 +106,9 @@ function buildSVG({ subheadline, kicker, brand, bg }) {
   <rect width="100%" height="100%" fill="#000"/>
 
   <!-- BRAND -->
-  <text x="${W - 100}" y="80"
+  <text x="${W - 110}" y="80"
         font-family="Rubik Microbe"
-        font-size="24"
+        font-size="28"
         fill="rgba(255,255,255,.7)"
         text-anchor="end">
     ${esc(brand)}
